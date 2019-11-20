@@ -2,12 +2,14 @@
 Microsoft Authentication Library for Angular Preview
 =========================================================
 
-The MSAL library preview for Angular is a wrapper of the core MSAL.js library which enables Angular(4.3 to 5) applications to authenticate enterprise users using Microsoft Azure Active Directory (AAD), Microsoft account users (MSA), users using social identity providers like Facebook, Google, LinkedIn etc. and get access to [Microsoft Cloud](https://cloud.microsoft.com) OR  [Microsoft Graph](https://graph.microsoft.io).
+The MSAL library preview for Angular is a wrapper of the core MSAL.js library which enables Angular(4.3 to 5) applications to authenticate enterprise users using Microsoft Azure Active Directory (AAD), Microsoft account users (MSA), users using social identity providers like Facebook, Google, LinkedIn etc. and get access to [Microsoft Cloud](https://www.microsoft.com/enterprise) OR  [Microsoft Graph](https://graph.microsoft.io).
 
 [![Build Status](https://travis-ci.org/AzureAD/microsoft-authentication-library-for-js.png?branch=dev)](https://travis-ci.org/AzureAD/microsoft-authentication-library-for-js)
 
 ## Important Note about the MSAL Angular Preview
 Please note that during the preview we may make changes to the API, internal cache format, and other mechanisms of this library, which you will be required to take along with bug fixes or feature improvements. This may impact your application. For instance, a change to the cache format may impact your users, such as requiring them to sign in again. An API change may require you to update your code. When we provide the General Availability release we will require you to update to the General Availability version within six months, as applications written using a preview version of library may no longer work.
+
+This is an early preview library and we are tracking certain [known issues and requests](https://github.com/AzureAD/microsoft-authentication-library-for-js/issues?q=is%3Aopen+is%3Aissue+label%3Aangular) which we plan on addressing. Please watch the [Roadmap](https://github.com/AzureAD/microsoft-authentication-library-for-js/wiki#roadmap) for details.
 
 ## Installation
 The msal-angular package is available on NPM:
@@ -135,6 +137,7 @@ Besides the required clientID, you can optionally pass the following config opti
                   redirectUri: "http://localhost:4200/",
                   validateAuthority : true,
                   cacheLocation : "localStorage",
+                  storeAuthStateInCookie: false, // dynamically set to true when IE11
                   postLogoutRedirectUri: "http://localhost:4200/",
                   navigateToLoginRequestUrl : true,
                   popUp: true,
@@ -161,7 +164,9 @@ Defaults to `window.location.href`.
 
 * **validateAuthority** : Validate the issuer of tokens. Default is true.
 
-* **cacheLocation** : Sets browser storage to either 'localStorage' or sessionStorage'. Defaults is 'sessionStorage'.
+* **cacheLocation** : Sets browser storage to either `localStorage` or `sessionStorage`. Defaults to `sessionStorage`.
+
+* **storeAuthStateInCookie** : Stores auth state in a browser cookie instead of local storage. Needs to be set to true when a user is on IE11, which may clear local storage contents when redirecting between websites in different zones. Defaults is `false`.
 
 * **postLogoutRedirectUri** : Redirects the user to postLogoutRedirectUri after logout. Defaults is 'redirectUri'.
 
@@ -177,8 +182,8 @@ only consent it and no access token will be acquired till the time client actual
 * **unprotectedResources** : Array of  URI's. Msal will not attach a token to outgoing requests that have these uri. Defaults to 'null'.
 
 * **protectedResourceMap** : Mapping of resources to scopes  {"https://graph.microsoft.com/v1.0/me", ["user.read", "mail.send"]}. Used internally by the MSAL for automatically attaching tokens in webApi calls.
-                             This is required only for CORS calls.	
-                            
+                             This is required only for CORS calls.
+
 export const protectedResourceMap:[string, string[]][]=[ ['https://buildtodoservice.azurewebsites.net/api/todolist',['api://a88bb933-319c-41b5-9f04-eff36d985612/access_as_user']] , ['https://graph.microsoft.com/v1.0/me', ['user.read']] ];
 
 * **level** : Configurable log level. Default value is Info.
@@ -244,10 +249,27 @@ export const protectedResourceMap:[string, string[]][]=[ ['https://buildtodoserv
 
 In your API project, you need to enable CORS API requests to receive flight requests.
 
-> Note: The Iframe needs to access the cookies for the same domain that you did the initial sign in on. IE does not allow to access cookies in Iframe for localhost. Your URL needs to be fully qualified domain i.e http://yoursite.azurewebsites.com. Chrome does not have this restriction.
+#### Internet Explorer support
 
-#### Trusted Site settings in IE
-If you put your site in the trusted site list, cookies are not accessible for Iframe requests. You need to remove protected mode for Internet zone or add the authority URL for the login to the trusted sites as well.
+This library supports Internet Explorer 11 with the following configuration:
+
+- For CORS API calls, the Iframe needs to access the cookies for the same domain that you did the initial sign in on. IE does not allow to access cookies in Iframe for localhost. Your URL needs to be fully qualified domain i.e http://yoursite.azurewebsites.com. Chrome does not have this restriction.
+- If you put your site in the trusted site list, cookies are not accessible for Iframe requests. You need to remove protected mode for Internet zone or add the authority URL for the login to the trusted sites as well.
+- IE may clear local storage when navigating between websites in different zones (e.g. your app and the login authority), which results in a broken experience when returning from the login page. To fix, set `storeAuthStateInCookie` to `true`.
+- There are known issues with popups in IE. We recommend using redirect flows by setting `popUp` to `false`.
+
+It is recommended that these properties are set dynamically based on the user's browser.
+
+```js
+const isIE = window.navigator.userAgent.indexOf("MSIE ") > -1 || window.navigator.userAgent.indexOf("Trident/") > -1;
+
+MsalModule.forRoot({
+    // ...
+    popUp: !isIE,
+    storeAuthStateInCookie: ieIE
+});
+
+```
 
 ## Samples
 
@@ -279,7 +301,7 @@ First navigate to the root directory of the library(msal-angular) and install th
 Then use the following command to build the library and run all the unit tests:
 
 	npm run ngcompile
-	
+
 	npm run test
 
 ## Security Library
