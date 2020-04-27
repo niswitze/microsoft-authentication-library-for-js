@@ -59,7 +59,7 @@ export const ClientAuthErrorMessage = {
     },
     userLoginRequiredError: {
         code: "user_login_error",
-        desc: "User login is required."
+        desc: "User login is required. For silent calls, request must contain either sid or login_hint"
     },
     userDoesNotExistError: {
         code: "user_non_existent",
@@ -92,6 +92,10 @@ export const ClientAuthErrorMessage = {
     cacheParseError: {
         code: "cannot_parse_cache",
         desc: "The cached token key is not a valid JSON and cannot be parsed"
+    },
+    blockTokenRequestsInHiddenIframe: {
+        code: "block_token_requests",
+        desc: "Token calls are blocked in hidden iframes"
     }
 };
 
@@ -222,4 +226,8 @@ export class ClientAuthError extends AuthError {
             errorMessage);
     }
 
+    static createBlockTokenRequestsInHiddenIframeError(): ClientAuthError {
+        return new ClientAuthError(ClientAuthErrorMessage.blockTokenRequestsInHiddenIframe.code,
+            ClientAuthErrorMessage.blockTokenRequestsInHiddenIframe.desc);
+    }
 }

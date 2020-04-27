@@ -5,11 +5,10 @@
 
 import { Authority } from "./authority/Authority";
 import { CryptoUtils } from "./utils/CryptoUtils";
-import { AuthenticationParameters, validateClaimsRequest } from "./AuthenticationParameters";
+import { AuthenticationParameters } from "./AuthenticationParameters";
 import { StringDict } from "./MsalTypes";
 import { Account } from "./Account";
-import { SSOTypes, Constants, PromptState, BlacklistedEQParams, libraryVersion } from "./utils/Constants";
-import { ClientConfigurationError } from "./error/ClientConfigurationError";
+import { SSOTypes, Constants, PromptState, libraryVersion } from "./utils/Constants";
 import { StringUtils } from "./utils/StringUtils";
 
 /**
@@ -58,8 +57,14 @@ export class ServerRequestParameters {
         this.clientId = clientId;
         this.nonce = CryptoUtils.createNewGuid();
 
-        // validate and populate state and correlationId
-        this.setRequestServerParams(scopes, state, correlationId, this.clientId);
+        // set scope to clientId if null
+        this.scopes = scopes? [ ...scopes] : [clientId];
+
+        // set state (already set at top level)
+        this.state = state;
+
+        // set correlationId
+        this.correlationId = correlationId;
 
         // telemetry information
         this.xClientSku = "MSAL.JS";
@@ -77,19 +82,17 @@ export class ServerRequestParameters {
      * @param request
      * @param serverAuthenticationRequest
      */
-    populateQueryParams(account: Account, request: AuthenticationParameters, adalIdTokenObject?: any): void {
+    populateQueryParams(account: Account, request: AuthenticationParameters|null, adalIdTokenObject?: object, silentCall?: boolean): void {
         let queryParameters: StringDict = {};
 
         if (request) {
             // add the prompt parameter to serverRequestParameters if passed
             if (request.prompt) {
-                this.validatePromptParameter(request.prompt);
                 this.promptValue = request.prompt;
             }
 
             // Add claims challenge to serverRequestParameters if passed
             if (request.claimsRequest) {
-                validateClaimsRequest(request);
                 this.claimsValue = request.claimsRequest;
             }
 
@@ -104,36 +107,20 @@ export class ServerRequestParameters {
         }
 
         /*
-         * adds sid/login_hint if not populated; populates domain_req, login_req and domain_hint
+         * adds sid/login_hint if not populated
          * this.logger.verbose("Calling addHint parameters");
          */
         queryParameters = this.addHintParameters(account, queryParameters);
 
         // sanity check for developer passed extraQueryParameters
-        let eQParams: StringDict;
-        if (request) {
-            eQParams = this.sanitizeEQParams(request);
-        }
+        const eQParams: StringDict|null = request ? request.extraQueryParameters : null;
 
         // Populate the extraQueryParameters to be sent to the server
         this.queryParameters = ServerRequestParameters.generateQueryParametersString(queryParameters);
-        this.extraQueryParameters = ServerRequestParameters.generateQueryParametersString(eQParams);
+        this.extraQueryParameters = ServerRequestParameters.generateQueryParametersString(eQParams, silentCall);
     }
 
     // #region QueryParam helpers
-
-    /**
-     * @hidden
-     * @ignore
-     *
-     * Utility to test if valid prompt value is passed in the request
-     * @param request
-     */
-    private validatePromptParameter (prompt: string) {
-        if ([PromptState.LOGIN, PromptState.SELECT_ACCOUNT, PromptState.CONSENT, PromptState.NONE].indexOf(prompt) < 0) {
-            throw ClientConfigurationError.createInvalidPromptError(prompt);
-        }
-    }
 
     /**
      * Constructs extraQueryParameters to be sent to the server for the AuthenticationParameters set by the developer
@@ -180,19 +167,9 @@ export class ServerRequestParameters {
                 ssoType = SSOTypes.ID_TOKEN;
                 ssoData = idTokenObject.upn;
             }
-            else {
-                ssoType = SSOTypes.ORGANIZATIONS;
-                ssoData = null;
-            }
         }
 
         serverReqParam = this.addSSOParameter(ssoType, ssoData);
-
-        // add the HomeAccountIdentifier info/ domain_hint
-        if (request && request.account && request.account.homeAccountIdentifier) {
-            serverReqParam = this.addSSOParameter(SSOTypes.HOMEACCOUNT_ID, request.account.homeAccountIdentifier, serverReqParam);
-        }
-
         return serverReqParam;
     }
 
@@ -200,7 +177,7 @@ export class ServerRequestParameters {
      * @hidden
      *
      * Adds login_hint to authorization URL which is used to pre-fill the username field of sign in page for the user if known ahead of time
-     * domain_hint can be one of users/organizations which when added skips the email based discovery process of the user
+     * domain_hint if added skips the email based discovery process of the user - only supported for interactive calls in implicit_flow
      * domain_req utid received as part of the clientInfo
      * login_req uid received as part of clientInfo
      * Also does a sanity check for extraQueryParameters passed by the user to ensure no repeat queryParameters
@@ -228,11 +205,6 @@ export class ServerRequestParameters {
                     qParams = this.addSSOParameter(SSOTypes.LOGIN_HINT, account.userName, qParams);
                 }
             }
-
-            const populateReqParams = !qParams[SSOTypes.DOMAIN_REQ] && !qParams[SSOTypes.LOGIN_REQ];
-            if (populateReqParams) {
-                qParams = this.addSSOParameter(SSOTypes.HOMEACCOUNT_ID, account.homeAccountIdentifier, qParams);
-            }
         }
 
         return qParams;
@@ -258,44 +230,10 @@ export class ServerRequestParameters {
             }
             case SSOTypes.ID_TOKEN: {
                 ssoParam[SSOTypes.LOGIN_HINT] = ssoData;
-                ssoParam[SSOTypes.DOMAIN_HINT] = SSOTypes.ORGANIZATIONS;
                 break;
             }
             case SSOTypes.LOGIN_HINT: {
                 ssoParam[SSOTypes.LOGIN_HINT] = ssoData;
-                break;
-            }
-            case SSOTypes.ORGANIZATIONS: {
-                ssoParam[SSOTypes.DOMAIN_HINT] = SSOTypes.ORGANIZATIONS;
-                break;
-            }
-            case SSOTypes.CONSUMERS: {
-                ssoParam[SSOTypes.DOMAIN_HINT] = SSOTypes.CONSUMERS;
-                break;
-            }
-            case SSOTypes.HOMEACCOUNT_ID: {
-                const homeAccountId = ssoData.split(".");
-                const uid = CryptoUtils.base64Decode(homeAccountId[0]);
-                const utid = CryptoUtils.base64Decode(homeAccountId[1]);
-
-                // TODO: domain_req and login_req are not needed according to eSTS team
-                ssoParam[SSOTypes.LOGIN_REQ] = uid;
-                ssoParam[SSOTypes.DOMAIN_REQ] = utid;
-
-                if (utid === Constants.consumersUtid) {
-                    ssoParam[SSOTypes.DOMAIN_HINT] = SSOTypes.CONSUMERS;
-                }
-                else {
-                    ssoParam[SSOTypes.DOMAIN_HINT] = SSOTypes.ORGANIZATIONS;
-                }
-                break;
-            }
-            case SSOTypes.LOGIN_REQ: {
-                ssoParam[SSOTypes.LOGIN_REQ] = ssoData;
-                break;
-            }
-            case SSOTypes.DOMAIN_REQ: {
-                ssoParam[SSOTypes.DOMAIN_REQ] = ssoData;
                 break;
             }
         }
@@ -304,38 +242,19 @@ export class ServerRequestParameters {
     }
 
     /**
-     * @hidden
-     * @ignore
-     * Removes unnecessary or duplicate query parameters from extraQueryParameters
-     * @param request
-     */
-    private sanitizeEQParams(request: AuthenticationParameters) : StringDict {
-        const eQParams : StringDict = request.extraQueryParameters;
-        if (!eQParams) {
-            return null;
-        }
-        if (request.claimsRequest) {
-            // this.logger.warning("Removed duplicate claims from extraQueryParameters. Please use either the claimsRequest field OR pass as extraQueryParameter - not both.");
-            delete eQParams[Constants.claims];
-        }
-        BlacklistedEQParams.forEach(param => {
-            if (eQParams[param]) {
-                // this.logger.warning("Removed duplicate " + param + " from extraQueryParameters. Please use the " + param + " field in request object.");
-                delete eQParams[param];
-            }
-        });
-        return eQParams;
-    }
-
-    /**
      * Utility to generate a QueryParameterString from a Key-Value mapping of extraQueryParameters passed
      * @param extraQueryParameters
      */
-    static generateQueryParametersString(queryParameters: StringDict): string {
-        let paramsString: string = null;
+    static generateQueryParametersString(queryParameters?: StringDict, silentCall?: boolean): string|null {
+        let paramsString: string|null = null;
 
         if (queryParameters) {
             Object.keys(queryParameters).forEach((key: string) => {
+                // sid cannot be passed along with login_hint or domain_hint
+                if(key === Constants.domain_hint && (silentCall || queryParameters[SSOTypes.SID])) {
+                    return;
+                }
+
                 if (paramsString == null) {
                     paramsString = `${key}=${encodeURIComponent(queryParameters[key])}`;
                 }
@@ -347,27 +266,6 @@ export class ServerRequestParameters {
 
         return paramsString;
     }
-
-    /**
-     * @hidden
-     *
-     * Validate  scopes/state/correlationId set in the request by the user
-     * @param request
-     */
-    private setRequestServerParams(scopes: Array<string>, state: string, correlationId: string, clientId: string) {
-        // set scope to clientId if null
-        this.scopes = scopes? [ ...scopes] : [clientId];
-
-        // append GUID to user set state  or set one for the user if null
-        this.state = state && !StringUtils.isEmpty(state) ? CryptoUtils.createNewGuid() + "|" + state : CryptoUtils.createNewGuid();
-
-        // validate user set correlationId or set one for the user if null
-        if(correlationId && !CryptoUtils.isGuid(correlationId)) {
-            throw ClientConfigurationError.createInvalidCorrelationIdError();
-        }
-        this.correlationId = correlationId && CryptoUtils.isGuid(correlationId)? correlationId : CryptoUtils.createNewGuid();
-    }
-
     // #endregion
 
     /**

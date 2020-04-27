@@ -1,11 +1,13 @@
 import { expect } from "chai";
 import { describe, it } from "mocha";
 import { WindowUtils } from "../../src/utils/WindowUtils";
+import { FramePrefix } from "../../src/utils/Constants";
+import { TEST_CONFIG } from "../TestConstants";
 import { ClientAuthError } from "../../src/error/ClientAuthError";
 
 describe("WindowUtils", () => {
     describe("monitorWindowForHash", () => {
-        it("times out", done => {
+        it("times out (popup)", done => {
             const iframe = {
                 contentWindow: {
                     location: {
@@ -17,6 +19,21 @@ describe("WindowUtils", () => {
 
             // @ts-ignore
             WindowUtils.monitorWindowForHash(iframe.contentWindow, 500)
+                .catch((err: ClientAuthError) => {
+                    done();
+                });
+        });
+
+        it("times out (iframe)", done => {
+            const iframe = {
+                contentWindow: {
+                    // @ts-ignore
+                    location: null // example of scenario that would never otherwise resolve
+                }
+            };
+
+            // @ts-ignore
+            WindowUtils.monitorWindowForHash(iframe.contentWindow, 500, "http://login.microsoftonline.com", true)
                 .catch((err: ClientAuthError) => {
                     done();
                 });
@@ -68,6 +85,20 @@ describe("WindowUtils", () => {
             setTimeout(() => {
                 iframe.contentWindow.closed = true;
             }, 500);
+        });
+    });
+
+    describe("generateFrameName", () => {
+        it("test idToken frame name created", () => {
+            const scopes = ["s1", "s2", "s3"];
+            const authority = TEST_CONFIG.validAuthority;
+            const requestSignature = `${scopes.join(" ").toLowerCase()}|${authority}`;
+
+            const idTokenFrameName = WindowUtils.generateFrameName(FramePrefix.ID_TOKEN_FRAME, requestSignature);
+            const tokenFrameName = WindowUtils.generateFrameName(FramePrefix.TOKEN_FRAME, requestSignature);
+
+            expect(idTokenFrameName).to.equal(`${FramePrefix.ID_TOKEN_FRAME}|s1 s2 s3|${TEST_CONFIG.validAuthority}`);
+            expect(tokenFrameName).to.equal(`${FramePrefix.TOKEN_FRAME}|s1 s2 s3|${TEST_CONFIG.validAuthority}`);
         });
     });
 });

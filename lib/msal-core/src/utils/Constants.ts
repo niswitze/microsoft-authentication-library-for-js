@@ -1,5 +1,3 @@
-import { CacheLocation } from "../Configuration";
-
 /*
  * Copyright (c) Microsoft Corporation. All rights reserved.
  * Licensed under the MIT License.
@@ -10,6 +8,7 @@ import { CacheLocation } from "../Configuration";
  * Constants
  */
 export class Constants {
+    static get libraryName(): string { return "Msal.js"; } // used in telemetry sdkName
     static get claims(): string { return "claims"; }
     static get clientId(): string { return "clientId"; }
 
@@ -18,8 +17,8 @@ export class Constants {
     static get scopes(): string { return "scopes"; }
 
     static get no_account(): string { return "NO_ACCOUNT"; }
-    static get consumersUtid(): string { return "9188040d-6c67-4c5b-b112-36a304b66dad"; }
     static get upn(): string { return "upn"; }
+    static get domain_hint(): string { return "domain_hint"; }
 
     static get prompt_select_account(): string { return "&prompt=select_account"; }
     static get prompt_none(): string { return "&prompt=none"; }
@@ -52,22 +51,16 @@ export class Constants {
 
     static get interactionTypeRedirect(): InteractionType { return "redirectInteraction"; }
     static get interactionTypePopup(): InteractionType { return "popupInteraction"; }
+    static get interactionTypeSilent(): InteractionType { return "silentInteraction"; }
+    static get inProgress(): string { return "inProgress"; }
 }
-
-/**
- * Status of the current token request
- */
-export enum RequestStatus {
-    CANCELLED = "Cancelled",
-    COMPLETED = "Completed",
-    IN_PROGRESS = "InProgress"
-};
 
 /**
  * Keys in the hashParams
  */
 export enum ServerHashParamKeys {
     SCOPE = "scope",
+    STATE = "state",
     ERROR = "error",
     ERROR_DESCRIPTION = "error_description",
     ACCESS_TOKEN = "access_token",
@@ -92,17 +85,19 @@ export enum TemporaryCacheKeys {
     LOGIN_REQUEST = "login.request",
     RENEW_STATUS = "token.renew.status",
     URL_HASH = "urlHash",
-    ANGULAR_LOGIN_REQUEST = "angular.login.request",
-    INTERACTION_STATUS = "interaction.status"
+    INTERACTION_STATUS = "interaction_status",
+    REDIRECT_REQUEST = "redirect_request"
 }
 
 export enum PersistentCacheKeys {
     IDTOKEN = "idtoken",
-    CLIENT_INFO = "client.info",
-    ADAL_ID_TOKEN = "adal.idtoken",
+    CLIENT_INFO = "client.info"
+}
+
+export enum ErrorCacheKeys {
+    LOGIN_ERROR = "login.error",
     ERROR = "error",
-    ERROR_DESC = "error.description",
-    LOGIN_ERROR = "login.error"
+    ERROR_DESC = "error.description"
 }
 
 export const AADTrustedHostList =  {
@@ -123,13 +118,8 @@ export enum SSOTypes {
     SID = "sid",
     LOGIN_HINT = "login_hint",
     ID_TOKEN ="id_token",
-    DOMAIN_HINT = "domain_hint",
-    ORGANIZATIONS = "organizations",
-    CONSUMERS = "consumers",
     ACCOUNT_ID = "accountIdentifier",
-    HOMEACCOUNT_ID = "homeAccountIdentifier",
-    LOGIN_REQ = "login_req",
-    DOMAIN_REQ = "domain_req"
+    HOMEACCOUNT_ID = "homeAccountIdentifier"
 };
 
 /**
@@ -140,7 +130,7 @@ export const BlacklistedEQParams = [
     SSOTypes.LOGIN_HINT
 ];
 
-export type InteractionType = "redirectInteraction" | "popupInteraction";
+export type InteractionType = "redirectInteraction" | "popupInteraction" | "silentInteraction";
 
 /**
  * we considered making this "enum" in the request instead of string, however it looks like the allowed list of
@@ -152,12 +142,20 @@ export const PromptState = {
     LOGIN: "login",
     SELECT_ACCOUNT: "select_account",
     CONSENT: "consent",
-    NONE: "none",
+    NONE: "none"
+};
+
+/**
+ * Frame name prefixes for the hidden iframe created in silent frames
+ */
+export const FramePrefix = {
+    ID_TOKEN_FRAME: "msalIdTokenFrame",
+    TOKEN_FRAME: "msalRenewFrame"
 };
 
 /**
  * MSAL JS Library Version
  */
 export function libraryVersion(): string {
-    return "1.2.0-beta.3";
+    return "1.3.0";
 }
